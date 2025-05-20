@@ -6,6 +6,8 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  output: 'export',
+  basePath: '/PruebaPagBomberos',
   images: {
     unoptimized: true,
   },
