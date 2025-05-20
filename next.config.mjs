@@ -6,13 +6,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
-  output: 'export',
-  basePath: '/PruebaPagBomberos',
-  trailingSlash: true,
   images: {
     unoptimized: true,
   },
-  assetPrefix: '/PruebaPagBomberos/',
 }
 
 export default nextConfig
