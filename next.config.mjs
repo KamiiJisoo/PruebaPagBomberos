@@ -12,6 +12,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  assetPrefix: '/PruebaPagBomberos/',
 }
 
 export default nextConfig
