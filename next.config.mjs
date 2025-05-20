@@ -8,6 +8,7 @@ const nextConfig = {
   },
   output: 'export',
   basePath: '/PruebaPagBomberos',
+  trailingSlash: true,
   images: {
     unoptimized: true,
   },
