@@ -18,16 +18,15 @@ export default function RootLayout({
         <header className="bg-[var(--primary)] text-white py-4 shadow-md sticky top-0 z-50">
           <div className="container mx-auto flex items-center justify-between px-2 md:px-0">
             <div className="flex items-center gap-3">
-              <div className="h-28 flex items-center justify-center bg-white rounded-lg mr-2" style={{height: '10%'}}>
-                {/* Logo de la organización */}
-                <img src="/LogoFinal.png" alt="Logo Bomberos" className="h-20 w-auto object-contain" style={{maxHeight: '40%'}} />
+              <div className="flex items-center bg-white rounded-lg px-4 py-2" style={{height: '112px'}}>
+                <img src="/LogoFinal.png" alt="Logo Bomberos" className="h-20 w-auto object-contain mr-4" />
+                <div className="flex flex-col">
+                  <span className="text-lg font-bold text-gray-800 mt-2">Cálculo de recargos y Horas Extras</span>
+                </div>
               </div>
-              <span className=" text-2xl font-bold tracking-lg">Control de Horas Extras</span>
             </div>
             <div className="flex items-center gap-4">
-              <div className="text-[var(--secondary)] font-bold text-lg hidden md:block">
-                Bomberos Colombia
-              </div>
+              
             </div>
           </div>
         </header>
@@ -37,7 +36,7 @@ export default function RootLayout({
         </main>
         {/* Footer institucional */}
         <footer className="bg-gray-200 text-center py-4 mt-8 text-gray-600 text-sm">
-          © 2025 Bomberos  Colombia - Control de Horas Extras
+          © 2025 U.A.E CUERPO OFICIAL DE BOMBEROS BOGOTA D.C. - Cálculo recargos y Horas Extras
         </footer>
       </body>
     </html>

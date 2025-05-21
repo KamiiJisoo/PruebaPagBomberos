@@ -976,7 +976,7 @@ export default function ControlHorasExtras() {
               </div>
             </div>
             <div className="flex flex-col md:flex-row gap-6 w-full justify-center mt-2">
-              <button className="bg-red-700 hover:bg-red-800 text-white w-full md:w-auto px-10 py-4 text-lg font-bold rounded-lg shadow flex items-center gap-2 justify-center transition-colors" onClick={calcularHorasYRecargos} type="button">
+              <button className="bg-red-500 hover:bg-red-500 text-white w-full md:w-auto px-10 py-4 text-lg font-bold rounded-lg shadow flex items-center gap-2 justify-center transition-colors" onClick={calcularHorasYRecargos} type="button">
                 <Clock className="w-5 h-5" />
                 CALCULAR HORAS Y RECARGOS
               </button>
