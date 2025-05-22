@@ -1,14 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import db from '../../../lib/db';
+import { supabase } from '@/lib/supabaseClient';
 
-export async function POST(req: NextRequest) {
-  // Obtener la IP del usuario
-  const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || req.ip || 'desconocida';
-  const fecha = new Date().toISOString();
+export async function POST() {
+  try {
+    const { error } = await supabase
+      .from('accesos')
+      .insert([
+        { 
+          ip: 'localhost', // En producción, obtendrías la IP real
+          fecha: new Date().toISOString()
+        }
+      ]);
 
-  // Guardar en la base de datos
-  const stmt = db.prepare('INSERT INTO accesos (ip, fecha) VALUES (?, ?)');
-  stmt.run(ip, fecha);
+    if (error) throw error;
 
-  return NextResponse.json({ ok: true });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error al registrar acceso:', error);
+    return NextResponse.json(
+      { error: 'Error al registrar acceso' },
+      { status: 500 }
+    );
+  }
 } 

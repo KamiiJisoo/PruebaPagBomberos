@@ -8,6 +8,7 @@ import DatePicker from "react-datepicker"
 import "react-datepicker/dist/react-datepicker.css"
 import festivos from "@/data/festivos.json"
 import { createHash } from 'crypto'
+import { supabase } from '../lib/supabaseClient'
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,14 +41,6 @@ const diasFestivos2024 = [
   "2024-11-11", // Independencia de Cartagena
   "2024-12-08", // Día de la Inmaculada Concepción
   "2024-12-25", // Navidad
-]
-
-// Cargos y salarios
-const cargos = [
-  { nombre: "BOMBERO", salario: 2054865 },
-  { nombre: "CABO DE BOMBERO", salario: 2197821 },
-  { nombre: "SARGENTO DE BOMBERO", salario: 2269299 },
-  { nombre: "TENIENTE DE BOMBERO", salario: 2510541 },
 ]
 
 // Interfaz para los datos de un día
@@ -109,7 +102,7 @@ export default function ControlHorasExtras() {
   const [mostrarModalAuth, setMostrarModalAuth] = useState(false)
   const [nuevoCargo, setNuevoCargo] = useState("")
   const [nuevoSalario, setNuevoSalario] = useState("")
-  const [cargosState, setCargosState] = useState(cargos)
+  const [cargosState, setCargosState] = useState<{ nombre: string; salario: number }[]>([])
   const [editando, setEditando] = useState<string | null>(null)
   const [focusedInput, setFocusedInput] = useState<'cargo' | 'salario' | null>(null)
   const inputCargoRef = useRef<HTMLInputElement>(null)
@@ -124,6 +117,23 @@ export default function ControlHorasExtras() {
 
   useEffect(() => {
     fetch('/api/registrar-acceso', { method: 'POST' });
+  }, []);
+
+  useEffect(() => {
+    // Verificar conexión a Supabase
+    const verificarConexion = async () => {
+      try {
+        const { data, error } = await supabase.from('cargos').select('*');
+        if (error) {
+          console.error('Error de conexión a Supabase:', error);
+        } else {
+          console.log('Conexión exitosa a Supabase:', data);
+        }
+      } catch (err) {
+        console.error('Error al conectar con Supabase:', err);
+      }
+    };
+    verificarConexion();
   }, []);
 
   // Función para formatear minutos a horas:minutos
@@ -193,10 +203,11 @@ export default function ControlHorasExtras() {
 
   // Manejar cambio de cargo
   const handleCambiarCargo = (valor: string) => {
-    setCargoSeleccionado(valor)
-    const cargo = cargosState.find((c) => c.nombre === valor)
+    if (valor === 'default') return;
+    setCargoSeleccionado(valor);
+    const cargo = cargosState.find((c) => c.nombre === valor);
     if (cargo) {
-      setSalarioMensual(cargo.salario)
+      setSalarioMensual(cargo.salario);
     }
   }
 
@@ -390,13 +401,54 @@ export default function ControlHorasExtras() {
     setDiasMes(nuevoDiasMes)
   }
 
-  // Sincronizar cargos con el selector
+  // Obtener cargos desde Supabase y suscribirse a cambios en tiempo real
   useEffect(() => {
-    if (!cargosState.find(c => c.nombre === cargoSeleccionado)) {
-      setCargoSeleccionado(cargosState[0]?.nombre || "")
-      setSalarioMensual(cargosState[0]?.salario || 0)
-    }
-  }, [cargosState])
+    // Obtener cargos iniciales
+    const fetchCargos = async () => {
+      try {
+        const { data, error } = await supabase.from('cargos').select('*');
+        if (error) {
+          console.error('Error al obtener cargos:', error);
+          return;
+        }
+        if (data) {
+          // Asegurarse de que los datos tengan la estructura correcta y no haya valores vacíos
+          const cargosFormateados = data
+            .filter(cargo => cargo.Nombre && cargo.Nombre.trim() !== '') // Filtrar cargos sin nombre
+            .map(cargo => ({
+              nombre: cargo.Nombre.trim(),
+              salario: Number(cargo.Salario) || 0
+            }));
+          
+          setCargosState(cargosFormateados);
+          
+          // Si no hay cargo seleccionado o el cargo seleccionado ya no existe, seleccionar el primero
+          if (cargosFormateados.length > 0) {
+            const cargoExiste = cargosFormateados.some(c => c.nombre === cargoSeleccionado);
+            if (!cargoExiste) {
+              setCargoSeleccionado(cargosFormateados[0].nombre);
+              setSalarioMensual(cargosFormateados[0].salario);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Error al conectar con Supabase:', err);
+      }
+    };
+    fetchCargos();
+
+    // Suscribirse a cambios en tiempo real
+    const subscription = supabase
+      .channel('public:cargos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cargos' }, (payload) => {
+        fetchCargos();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   // Función para generar hash de la contraseña
   const generateHash = (text: string) => {
@@ -446,52 +498,119 @@ export default function ControlHorasExtras() {
 
   // Modal de gestión de cargos
   const ModalGestionCargos = () => {
-    const [editandoSalario, setEditandoSalario] = useState<string | null>(null)
-    const [valorEditando, setValorEditando] = useState("")
-    const [nuevoCargoInput, setNuevoCargoInput] = useState("")
-    const [nuevoSalarioInput, setNuevoSalarioInput] = useState("")
+    const [editandoCargo, setEditandoCargo] = useState<string | null>(null);
+    const [editandoSalario, setEditandoSalario] = useState<string | null>(null);
+    const [valorEditando, setValorEditando] = useState("");
+    const [nuevoCargoInput, setNuevoCargoInput] = useState("");
+    const [nuevoSalarioInput, setNuevoSalarioInput] = useState("");
 
     const handleNuevoCargoInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setNuevoCargoInput(e.target.value.toUpperCase())
-    }
+      setNuevoCargoInput(e.target.value.toUpperCase());
+    };
 
     const handleNuevoSalarioInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-      setNuevoSalarioInput(e.target.value.replace(/[^0-9]/g, ''))
-    }
+      setNuevoSalarioInput(e.target.value.replace(/[^0-9]/g, ""));
+    };
 
-    const handleSubmitNuevo = (e: React.FormEvent) => {
-      e.preventDefault()
-      if (!nuevoCargoInput.trim() || !nuevoSalarioInput.trim() || isNaN(Number(nuevoSalarioInput))) return
-      setCargosState([...cargosState, { nombre: nuevoCargoInput.trim(), salario: Number(nuevoSalarioInput) }])
-      setNuevoCargoInput("")
-      setNuevoSalarioInput("")
-    }
+    const handleSubmitNuevo = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!nuevoCargoInput.trim() || !nuevoSalarioInput.trim() || isNaN(Number(nuevoSalarioInput))) return;
+      try {
+        const { error } = await supabase.from("cargos").insert([
+          {
+            Nombre: nuevoCargoInput.trim(),
+            Salario: Number(nuevoSalarioInput),
+          },
+        ]);
+        if (error) throw error;
+        setNuevoCargoInput("");
+        setNuevoSalarioInput("");
+      } catch (err) {
+        console.error("Error al agregar cargo:", err);
+      }
+    };
 
-    const handleGuardarEdicion = (cargoNombre: string) => {
-      if (!valorEditando.trim() || isNaN(Number(valorEditando))) return
-      setCargosState(cargosState.map(c => 
-        c.nombre === cargoNombre ? { ...c, salario: Number(valorEditando) } : c
-      ))
-      setEditandoSalario(null)
-      setValorEditando("")
-    }
+    const handleGuardarEdicion = async (cargoNombre: string) => {
+      if (!valorEditando.trim()) return;
+      try {
+        if (editandoCargo === cargoNombre) {
+          // Actualizar nombre
+          const { error } = await supabase
+            .from("cargos")
+            .update({ Nombre: valorEditando.trim().toUpperCase() })
+            .eq("Nombre", cargoNombre);
+          if (error) throw error;
+        } else if (editandoSalario === cargoNombre) {
+          // Actualizar salario
+          if (isNaN(Number(valorEditando))) return;
+          const { error } = await supabase
+            .from("cargos")
+            .update({ Salario: Number(valorEditando) })
+            .eq("Nombre", cargoNombre);
+          if (error) throw error;
+        }
+        setEditandoCargo(null);
+        setEditandoSalario(null);
+        setValorEditando("");
+      } catch (err) {
+        console.error("Error al actualizar cargo:", err);
+      }
+    };
+
+    const handleEliminarCargo = async (cargoNombre: string) => {
+      if (cargoNombre === cargoSeleccionado) {
+        alert("No puedes eliminar el cargo seleccionado.");
+        return;
+      }
+      try {
+        const { error } = await supabase
+          .from("cargos")
+          .delete()
+          .eq("Nombre", cargoNombre);
+        if (error) throw error;
+      } catch (err) {
+        console.error("Error al eliminar cargo:", err);
+      }
+    };
 
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
         <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-2xl relative">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-bold text-bomberored-800 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-6 h-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                />
               </svg>
               Gestión de Cargos
             </h2>
-            <button 
+            <button
               className="text-gray-500 hover:text-bomberored-700 transition-colors"
               onClick={() => setMostrarModalCargos(false)}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-6 h-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </button>
           </div>
@@ -501,7 +620,12 @@ export default function ControlHorasExtras() {
             onSubmit={handleSubmitNuevo}
           >
             <div className="flex-1">
-              <Label htmlFor="nuevoCargo" className="text-sm font-medium text-gray-700 mb-1 block">Nuevo Cargo</Label>
+              <Label
+                htmlFor="nuevoCargo"
+                className="text-sm font-medium text-gray-700 mb-1 block"
+              >
+                Nuevo Cargo
+              </Label>
               <input
                 id="nuevoCargo"
                 type="text"
@@ -513,15 +637,20 @@ export default function ControlHorasExtras() {
                 autoComplete="off"
                 spellCheck="false"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    document.getElementById('nuevoSalario')?.focus()
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    document.getElementById("nuevoSalario")?.focus();
                   }
                 }}
               />
             </div>
             <div className="w-full md:w-48">
-              <Label htmlFor="nuevoSalario" className="text-sm font-medium text-gray-700 mb-1 block">Salario</Label>
+              <Label
+                htmlFor="nuevoSalario"
+                className="text-sm font-medium text-gray-700 mb-1 block"
+              >
+                Salario
+              </Label>
               <input
                 id="nuevoSalario"
                 type="text"
@@ -535,15 +664,18 @@ export default function ControlHorasExtras() {
                 autoComplete="off"
                 spellCheck="false"
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleSubmitNuevo(e)
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSubmitNuevo(e);
                   }
                 }}
               />
             </div>
             <div className="flex items-end">
-              <Button type="submit" className="w-full md:w-auto bg-bomberored-700 hover:bg-bomberored-800">
+              <Button
+                type="submit"
+                className="w-full md:w-auto bg-bomberored-700 hover:bg-bomberored-800"
+              >
                 Agregar Cargo
               </Button>
             </div>
@@ -556,33 +688,42 @@ export default function ControlHorasExtras() {
               <div className="col-span-2 text-center">ACCIONES</div>
             </div>
             {cargosState.map((cargo) => (
-              <div key={cargo.nombre} className="grid grid-cols-12 gap-4 items-center py-3 border-b border-gray-100">
+              <div
+                key={cargo.nombre}
+                className="grid grid-cols-12 gap-4 items-center py-3 border-b border-gray-100"
+              >
                 <div className="col-span-6">
-                  <span className="font-medium text-gray-900">{cargo.nombre}</span>
-                </div>
-                <div className="col-span-4">
-                  {editandoSalario === cargo.nombre ? (
+                  {editandoCargo === cargo.nombre ? (
                     <input
                       type="text"
                       value={valorEditando}
-                      onChange={(e) => setValorEditando(e.target.value.replace(/[^0-9]/g, ''))}
+                      onChange={(e) =>
+                        setValorEditando(e.target.value.toUpperCase())
+                      }
                       className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bomberored-700"
                       autoComplete="off"
                       spellCheck="false"
                       autoFocus
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleGuardarEdicion(cargo.nombre)
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleGuardarEdicion(cargo.nombre);
                         }
                       }}
                     />
                   ) : (
-                    <span className="text-gray-900">$ {cargo.salario.toLocaleString()}</span>
+                    <span className="font-medium text-gray-900">
+                      {cargo.nombre}
+                    </span>
                   )}
                 </div>
+                <div className="col-span-4">
+                  <span className="text-gray-900">
+                    $ {cargo.salario ? cargo.salario.toLocaleString() : "0"}
+                  </span>
+                </div>
                 <div className="col-span-2 flex items-center justify-end gap-2">
-                  {editandoSalario === cargo.nombre ? (
+                  {editandoCargo === cargo.nombre ? (
                     <>
                       <Button
                         size="sm"
@@ -594,7 +735,49 @@ export default function ControlHorasExtras() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => { setEditandoSalario(null); setValorEditando("") }}
+                        onClick={() => {
+                          setEditandoCargo(null);
+                          setEditandoSalario(null);
+                          setValorEditando("");
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                    </>
+                  ) : editandoSalario === cargo.nombre ? (
+                    <>
+                      <input
+                        type="text"
+                        value={valorEditando}
+                        onChange={(e) =>
+                          setValorEditando(e.target.value.replace(/[^0-9]/g, ""))
+                        }
+                        className="w-24 rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bomberored-700"
+                        autoComplete="off"
+                        spellCheck="false"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleGuardarEdicion(cargo.nombre);
+                          }
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleGuardarEdicion(cargo.nombre)}
+                      >
+                        Guardar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditandoCargo(null);
+                          setEditandoSalario(null);
+                          setValorEditando("");
+                        }}
                       >
                         Cancelar
                       </Button>
@@ -604,23 +787,27 @@ export default function ControlHorasExtras() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => { 
-                          setEditandoSalario(cargo.nombre)
-                          setValorEditando(cargo.salario.toString())
+                        onClick={() => {
+                          setEditandoCargo(cargo.nombre);
+                          setValorEditando(cargo.nombre);
                         }}
                       >
-                        Editar
+                        Editar Nombre
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditandoSalario(cargo.nombre);
+                          setValorEditando(cargo.salario.toString());
+                        }}
+                      >
+                        Editar Salario
                       </Button>
                       <Button
                         size="sm"
                         variant="destructive"
-                        onClick={() => {
-                          if (cargo.nombre === cargoSeleccionado) {
-                            alert("No puedes eliminar el cargo seleccionado.")
-                            return
-                          }
-                          setCargosState(cargosState.filter(c => c.nombre !== cargo.nombre))
-                        }}
+                        onClick={() => handleEliminarCargo(cargo.nombre)}
                         disabled={cargo.nombre === cargoSeleccionado}
                       >
                         Eliminar
@@ -633,8 +820,8 @@ export default function ControlHorasExtras() {
           </div>
         </div>
       </div>
-    )
-  }
+    );
+  };
 
   // Modal de autenticación
   const ModalAuth = () => {
@@ -928,13 +1115,13 @@ export default function ControlHorasExtras() {
                 <div className="uppercase text-gray-500 font-bold text-sm mb-2">Calcular precio horas extras</div>
                 <div>
                   <div className="text-xs text-gray-500 font-bold mb-1">Cargo</div>
-                  <Select value={cargoSeleccionado} onValueChange={handleCambiarCargo}>
+                  <Select value={cargoSeleccionado || 'default'} onValueChange={handleCambiarCargo}>
                     <SelectTrigger id="cargo">
                       <SelectValue placeholder="Seleccionar cargo" />
                     </SelectTrigger>
                     <SelectContent className="bg-white shadow-lg border border-gray-200 z-50">
                       {cargosState.map((cargo) => (
-                        <SelectItem key={cargo.nombre} value={cargo.nombre}>
+                        <SelectItem key={cargo.nombre} value={cargo.nombre || 'default'}>
                           {cargo.nombre}
                         </SelectItem>
                       ))}
